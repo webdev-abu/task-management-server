@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion, Db, ObjectId } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const cookieParser = require("cookie-parser");
 const jwt = require("jsonwebtoken");
 // const jwt = require("jsonwebtoken");
@@ -43,8 +43,6 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@nabenducluster.rpwkxww.mongodb.net/?retryWrites=true&w=majority&appName=NabenduCluster`;
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@nabenducluster.rpwkxww.mongodb.net/?retryWrites=true&w=majority&appName=NabenduCluster`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -60,6 +58,7 @@ async function run() {
   try {
     const bd = client.db("task-managementDB");
     const usersCollection = bd.collection("users");
+    const tasksCollection = bd.collection("tasks");
 
     // auth related api
     app.post("/jwt", async (req, res) => {
@@ -100,6 +99,79 @@ async function run() {
       const result = await usersCollection.insertOne({
         ...user,
       });
+      res.send(result);
+    });
+
+    // ✅ GET all tasks
+    app.get("/tasks", async (req, res) => {
+      try {
+        const tasks = await tasksCollection.find().sort({ order: 1 }).toArray();
+        res.send(tasks);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Error fetching tasks" });
+      }
+    });
+
+    // ✅ POST: Add a new task
+    app.post("/tasks", async (req, res) => {
+      try {
+        const { title, description, category } = req.body;
+        const newTask = {
+          title,
+          description: description || "",
+          category: category || "To-Do",
+          timestamp: new Date(),
+          order: Date.now(),
+        };
+        const result = await tasksCollection.insertOne(newTask);
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Error adding task" });
+      }
+    });
+
+    // ✅ PUT: Update an existing task
+    app.put("/tasks/edit/:id", async (req, res) => {
+      const tasks = req.body.tasks;
+      const id = req.params.id;
+      const result = await tasksCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { tasks } }
+      );
+      res.send(result);
+    });
+    app.put("/tasks/:id", async (req, res) => {
+      const tasks = req.body.category;
+      const id = req.params.id;
+      const result = await tasksCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { category: tasks } }
+      );
+      res.send(result);
+    });
+
+    // ✅ DELETE: Remove a task
+    app.delete("/tasks/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        console.log(id);
+        const result = await tasksCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        if (result.deletedCount === 0)
+          return res.status(404).send({ error: "Task not found" });
+        res.send({ message: "Task deleted" });
+      } catch (error) {
+        res.status(500).send({ error: "Failed to delete task" });
+      }
+    });
+
+    // ✅ PUT: Reorder tasks
+    app.put("/tasks/reorder", async (req, res) => {
+      const { tasks } = req.body;
+      const result = await tasksCollection.updateMany({}, { tasks });
       res.send(result);
     });
   } finally {
